@@ -42,6 +42,11 @@ def main() -> None:
         props = extract(fetcher.get(url), url)
         for key in DROP:
             props.pop(key, None)
+        details = props.get("lotDetailsData")
+        if isinstance(details, dict):
+            # The seo block is only hreflang boilerplate, and its localized slugs trip
+            # secret scanners that read "realistisk-originale" as an sk- key.
+            details.pop("seo", None)
         (HERE / name).write_text(json.dumps(props, indent=1, ensure_ascii=False))
         print(f"wrote {name} from {url}")
 
