@@ -72,10 +72,14 @@ def _notify_macos(alert: Alert) -> None:
     subprocess.run(["osascript", "-e", script], check=False)
 
 
-def _notify_cli(command: str, alert: Alert, target: str | None) -> None:
-    if not shutil.which(command) or not target:
-        return
+def _notify_cli(command: str, alert: Alert, target: str | None) -> str | None:
+    """Send through an external messaging CLI. Returns a reason string if it couldn't."""
+    if not shutil.which(command):
+        return f"{command} is not on PATH, so that alert was not sent"
+    if not target:
+        return f"no target configured for {command}, so that alert was not sent"
     subprocess.run([command, "send", target, f"{alert.title}: {alert.message}"], check=False)
+    return None
 
 
 def deliver(
@@ -86,12 +90,24 @@ def deliver(
     whatsapp_target: str | None = None,
     console=None,
 ) -> None:
+    problems: set[str] = set()
     for alert in alerts:
         if "terminal" in sinks and console is not None:
             console.print(f"[bold yellow]{alert.kind}[/bold yellow] {alert.title}: {alert.message}")
         if "macos" in sinks:
             _notify_macos(alert)
         if "telegram" in sinks:
-            _notify_cli(TELEGRAM_CLI, alert, telegram_target)
+            problem = _notify_cli(TELEGRAM_CLI, alert, telegram_target)
+            if problem:
+                problems.add(problem)
         if "whatsapp" in sinks:
-            _notify_cli(WHATSAPP_CLI, alert, whatsapp_target)
+            problem = _notify_cli(WHATSAPP_CLI, alert, whatsapp_target)
+            if problem:
+                problems.add(problem)
+
+    # A sink that quietly does nothing is worse than no sink, so say so.
+    for problem in sorted(problems):
+        if console is not None:
+            console.print(f"[red]{problem}[/red]")
+        else:
+            print(problem)

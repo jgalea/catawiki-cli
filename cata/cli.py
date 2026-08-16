@@ -67,6 +67,11 @@ def search_cmd(
     ending_in: int = typer.Option(None, "--ending-in", help="Only lots closing within this many days"),
     no_reserve: bool = typer.Option(False, "--no-reserve", help="Only lots without a reserve price"),
     sort: str = typer.Option(None, "--sort", help="Catawiki sort key, for example closing_soon"),
+    fuzzy: bool = typer.Option(
+        False,
+        "--fuzzy",
+        help="Keep Catawiki's semantic fallback results, which it returns when nothing matches",
+    ),
     with_bids: bool = typer.Option(
         False,
         "--with-bids",
@@ -85,9 +90,14 @@ def search_cmd(
         ending_in_days=ending_in,
         no_reserve=no_reserve,
         sort=sort,
+        fuzzy=fuzzy,
     )
     if not lots:
-        console.print("[yellow]no lots found[/yellow]")
+        console.print(f"[yellow]no lots match {query!r}[/yellow]")
+        console.print(
+            "[dim]Catawiki answers an unmatched query with semantically similar lots "
+            "rather than nothing. Those are hidden here; pass --fuzzy to see them.[/dim]"
+        )
         return
 
     details = None
@@ -132,6 +142,17 @@ def track_add(
     max_price: int = typer.Option(None, "--max-price", help="Saved-search filter: highest bid in whole euros"),
     category: int = typer.Option(None, "--category", help="Saved-search filter: category id"),
     no_reserve: bool = typer.Option(False, "--no-reserve", help="Saved-search filter: no-reserve lots only"),
+    match: str = typer.Option(
+        None,
+        "--match",
+        help="Only count a lot as a hit if its title or specs contain all these words. "
+        "Catawiki's own search misses some model names, so match locally instead.",
+    ),
+    notify: str = typer.Option(
+        None,
+        "--notify",
+        help="Where to send new-match alerts: terminal,macos,telegram,whatsapp, or none",
+    ),
 ) -> None:
     """Track a lot, or save a search for the harvester to sweep."""
     store = Store()
@@ -151,8 +172,12 @@ def track_add(
         filters["category"] = category
     if no_reserve:
         filters["no_reserve"] = True
-    store.add_search(name or target, target, filters)
-    console.print(f"saved search [bold]{name or target}[/bold]")
+    store.add_search(name or target, target, filters, match_pattern=match, notify=notify)
+    line = f"saved search [bold]{name or target}[/bold]"
+    if match:
+        line += f", alerting on lots matching [bold]{match}[/bold]"
+    console.print(line)
+    console.print(f"[dim]sweeps hourly, notifies via {notify or 'macos'}[/dim]")
 
 
 @track_app.command("list")
@@ -221,8 +246,13 @@ def harvest_cmd(
             report = harvest_mod.sweep(client, store)
         console.print(
             f"swept {report.searches} searches: {report.lots_seen} lots seen, {report.lots_new} new, "
-            f"{report.enriched} enriched, {report.refreshed} refreshed, {report.failed} failed"
+            f"{report.matched} matched, {report.enriched} enriched, {report.refreshed} refreshed, "
+            f"{report.failed} failed"
         )
+        for batch in harvest_mod.pending_alerts(store):
+            alerts_mod.deliver(batch.alerts, batch.sinks, console=console)
+            for alert in batch.alerts:
+                store.mark_alerted(batch.search_id, alert.lot_id)
     if not sweep_only:
         with console.status("closing out ended lots"):
             report = harvest_mod.close_out(client, store)

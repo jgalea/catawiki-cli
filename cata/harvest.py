@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from .errors import CataError
+from .matching import matches_pattern
 
 REFRESH_WINDOW_HOURS = 48
 
@@ -16,6 +17,7 @@ class SweepReport:
     lots_new: int = 0
     enriched: int = 0
     refreshed: int = 0
+    matched: int = 0
     failed: int = 0
 
 
@@ -67,11 +69,14 @@ def sweep(
             report.failed += 1
             continue
         report.searches += 1
+        pattern = search["match_pattern"]
         for lot in lots:
             report.lots_seen += 1
             if not _known(store, lot.id):
                 report.lots_new += 1
             store.upsert_lot(lot)
+            if matches_pattern(lot, pattern) and store.record_hit(search["id"], lot.id):
+                report.matched += 1
         store.touch_search(search["id"], now)
 
     for lot_id in store.lots_needing_detail(enrich_limit):
@@ -89,6 +94,51 @@ def sweep(
             report.failed += 1
 
     return report
+
+
+@dataclass
+class AlertBatch:
+    search_id: int
+    search_name: str
+    sinks: list[str]
+    alerts: list
+
+
+def pending_alerts(store, default_sinks: str = "macos") -> list[AlertBatch]:
+    """New-lot alerts owed per saved search. Hits are marked only after a successful send."""
+    from .alerts import Alert
+
+    batches: list[AlertBatch] = []
+    for search in store.searches():
+        lot_ids = store.unalerted_hits(search["id"])
+        if not lot_ids:
+            continue
+        sinks = [s.strip() for s in (search["notify"] or default_sinks).split(",") if s.strip()]
+        if not sinks or "none" in sinks:
+            continue
+
+        alerts = []
+        for lot_id in lot_ids:
+            row = store.connect().execute("select title, url from lots where id=?", (lot_id,)).fetchone()
+            bid_row = store.connect().execute(
+                "select current_bid from bid_snapshots where lot_id=? order by observed_at desc limit 1",
+                (lot_id,),
+            ).fetchone()
+            message = f'new match on "{search["name"]}"'
+            if bid_row and bid_row["current_bid"]:
+                message += f", bid €{bid_row['current_bid'] // 100}"
+            if row and row["url"]:
+                message += f" — {row['url']}"
+            alerts.append(
+                Alert(
+                    lot_id=lot_id,
+                    kind="new_lot",
+                    title=(row["title"] if row else None) or f"lot {lot_id}",
+                    message=message,
+                )
+            )
+        batches.append(AlertBatch(search["id"], search["name"], sinks, alerts))
+    return batches
 
 
 def close_out(client, store, *, now: datetime | None = None, limit: int = 200) -> CloseOutReport:

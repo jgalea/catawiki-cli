@@ -24,6 +24,14 @@ Search only indexes open lots. There's no sold filter and no archive, so a sold-
 
 Search results carry no closing time and no specifications. Both live only on lot pages, so the harvester spends one lot-page fetch per new lot before that lot can be closed out or used as a comparable.
 
+## Catawiki's search never returns nothing
+
+Ask Catawiki for something it doesn't have and it answers with semantically similar lots instead of an empty result. Searching "herman miller aeron" returns toy helicopters, a teddy bear and a Zeppelin stamp, because "aeron" is near "aero" and "Herman" is near "Hermann".
+
+Every lot carries an `isVectorSearchResult` flag marking those, and the page carries `meta.extended_search_result`. `cata` drops flagged lots and tells you nothing matched. `--fuzzy` keeps them.
+
+This matters more than it sounds. Genuine result pages are salted with fallback lots too: "herman miller" returns 9 real hits and 15 semantic neighbours on the same page, so the filter is applied per lot rather than per page.
+
 ## Install
 
 ```
@@ -38,6 +46,8 @@ cata search "rolex" --max-price 2000 --with-bids  # slower, adds current bid and
 cata lot 105781311 --bids                         # one lot, in full
 cata track add "omega speedmaster" --name watches # save a search for the harvester
 cata track add 105781311 --max-bid 900            # watch one lot
+cata track add "herman miller" --name aeron \
+  --match aeron --notify macos                    # notify when a matching lot appears
 cata watch                                        # live table of watched lots
 cata harvest                                      # sweep, enrich, close out
 cata comps 105781311                              # what comparable lots sold for
@@ -55,6 +65,12 @@ cata export --table bids --format csv             # the raw local data
 Comparability is tried in tiers, and the answer always states which tier it used: category plus brand plus model first, then category plus brand, then title overlap within the category, then the category alone. Grouping happens on the middle rung of Catawiki's category breadcrumb, because a lot's own category is often an auction theme like "Essential Watches below €1,500" that fragments the sample.
 
 Below eight sold comparables, `comps` returns the count and no median. `deals` skips any lot whose comps didn't clear that bar, so a discount percentage is never computed against a handful of lots.
+
+## Alerts on new lots
+
+A saved search with `--match` fires once per lot the first time one matches, and never again for that lot. The match runs locally over the title, subtitle and specifications, which is the reliable way to watch for a model name Catawiki's own search can't find.
+
+Sinks are `terminal`, `macos`, `telegram` and `whatsapp`, comma-separated, or `none` to record hits silently. The last two shell out to a `telegram` or `pigeon` command; if that binary isn't on your PATH, the run says so rather than silently dropping the alert.
 
 ## Scheduling
 

@@ -65,8 +65,18 @@ create table if not exists searches (
     name text unique,
     query text,
     filters_json text,
+    match_pattern text,
+    notify text,
     created_at text,
     last_swept_at text
+);
+
+create table if not exists search_hits (
+    search_id integer,
+    lot_id integer,
+    found_at text,
+    alerted_at text,
+    primary key (search_id, lot_id)
 );
 
 create table if not exists watches (
@@ -82,6 +92,19 @@ create table if not exists meta (
     value text
 );
 """
+
+
+ADDED_COLUMNS = {
+    "lots": {
+        "group_category_id": "integer",
+        "category_path_json": "text",
+        "detail_fetched_at": "text",
+    },
+    "searches": {
+        "match_pattern": "text",
+        "notify": "text",
+    },
+}
 
 
 def _now() -> str:
@@ -119,6 +142,15 @@ class Store:
     def _migrate(self) -> None:
         conn = self.connect()
         conn.executescript(SCHEMA)
+        # `create table if not exists` leaves an older database without newer columns,
+        # so add any that are missing rather than silently running against a stale shape.
+        for table, columns in ADDED_COLUMNS.items():
+            present = {
+                row["name"] for row in conn.execute(f"pragma table_info({table})").fetchall()
+            }
+            for name, decl in columns.items():
+                if name not in present:
+                    conn.execute(f"alter table {table} add column {name} {decl}")
         conn.execute(
             "insert or replace into meta(key, value) values('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -300,17 +332,55 @@ class Store:
         ).fetchall()
         return [row["id"] for row in rows]
 
-    def add_search(self, name: str, query: str, filters: dict) -> int:
+    def add_search(
+        self,
+        name: str,
+        query: str,
+        filters: dict,
+        match_pattern: str | None = None,
+        notify: str | None = None,
+    ) -> int:
         conn = self.connect()
         conn.execute(
             """
-            insert into searches (name, query, filters_json, created_at) values (?,?,?,?)
-            on conflict(name) do update set query=excluded.query, filters_json=excluded.filters_json
+            insert into searches (name, query, filters_json, match_pattern, notify, created_at)
+            values (?,?,?,?,?,?)
+            on conflict(name) do update set
+                query=excluded.query,
+                filters_json=excluded.filters_json,
+                match_pattern=excluded.match_pattern,
+                notify=excluded.notify
             """,
-            (name, query, json.dumps(filters or {}), _now()),
+            (name, query, json.dumps(filters or {}), match_pattern, notify, _now()),
         )
         conn.commit()
         return conn.execute("select id from searches where name=?", (name,)).fetchone()["id"]
+
+    def record_hit(self, search_id: int, lot_id: int) -> bool:
+        """Register a lot as matching a saved search. True the first time only."""
+        conn = self.connect()
+        cur = conn.execute(
+            "insert into search_hits (search_id, lot_id, found_at) values (?,?,?)"
+            " on conflict(search_id, lot_id) do nothing",
+            (search_id, lot_id, _now()),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+    def unalerted_hits(self, search_id: int) -> list[int]:
+        rows = self.connect().execute(
+            "select lot_id from search_hits where search_id=? and alerted_at is null order by found_at",
+            (search_id,),
+        ).fetchall()
+        return [row["lot_id"] for row in rows]
+
+    def mark_alerted(self, search_id: int, lot_id: int) -> None:
+        conn = self.connect()
+        conn.execute(
+            "update search_hits set alerted_at=? where search_id=? and lot_id=?",
+            (_now(), search_id, lot_id),
+        )
+        conn.commit()
 
     def searches(self) -> list[sqlite3.Row]:
         return self.connect().execute("select * from searches order by id").fetchall()

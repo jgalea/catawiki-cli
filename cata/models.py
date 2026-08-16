@@ -87,6 +87,7 @@ class Lot:
     reserve_price_set: bool | None = None
     free_shipping: bool | None = None
     favorite_count: int | None = None
+    is_vector_result: bool = False
 
 
 @dataclass(frozen=True)
@@ -129,3 +130,9 @@ class SearchPage:
     total: int
     lots: tuple[Lot, ...]
     facets: tuple[Facet, ...] = ()
+    extended: bool = False
+
+    @property
+    def matches(self) -> tuple[Lot, ...]:
+        """Lots Catawiki matched literally, dropping its semantic fallback."""
+        return tuple(lot for lot in self.lots if not lot.is_vector_result)

@@ -49,3 +49,27 @@ def test_sold_fires_for_closed_lot(lot_closed_props):
         now=datetime.now(timezone.utc),
     )
     assert any(alert.kind == "sold" for alert in alerts)
+
+
+class FakeConsole:
+    def __init__(self):
+        self.lines = []
+
+    def print(self, text):
+        self.lines.append(str(text))
+
+
+def test_unavailable_sink_reports_instead_of_silently_skipping():
+    from cata.alerts import Alert, deliver
+
+    console = FakeConsole()
+    deliver([Alert(1, "new_lot", "a chair", "new match")], ["telegram"], console=console)
+    assert any("not sent" in line for line in console.lines)
+
+
+def test_terminal_sink_prints_the_alert():
+    from cata.alerts import Alert, deliver
+
+    console = FakeConsole()
+    deliver([Alert(1, "new_lot", "a chair", "new match")], ["terminal"], console=console)
+    assert any("a chair" in line for line in console.lines)

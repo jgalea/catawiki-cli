@@ -55,15 +55,23 @@ class Client:
         url = self.search_url(query, **kwargs)
         return parse_search(extract(self.fetcher.get(url), url))
 
-    def search_all(self, query: str, *, limit: int = 48, **kwargs) -> list[Lot]:
+    def search_all(self, query: str, *, limit: int = 48, fuzzy: bool = False, **kwargs) -> list[Lot]:
+        """Page through a search.
+
+        Catawiki never returns an empty result set: when nothing matches it falls back to
+        semantic neighbours, and it mixes those into genuine result pages too. They are
+        dropped unless fuzzy is set, so an unmatched query returns nothing rather than junk.
+        """
         collected: list[Lot] = []
+        seen = 0
         page = 1
         while len(collected) < limit:
             result = self.search(query, page=page, **kwargs)
             if not result.lots:
                 break
-            collected.extend(result.lots)
-            if len(collected) >= result.total or len(result.lots) < PER_PAGE:
+            collected.extend(result.lots if fuzzy else result.matches)
+            seen += len(result.lots)
+            if seen >= result.total or len(result.lots) < PER_PAGE:
                 break
             page += 1
         return collected[:limit]

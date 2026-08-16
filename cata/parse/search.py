@@ -24,6 +24,7 @@ def _lot(raw: dict) -> Lot:
         reserve_price_set=raw.get("reservePriceSet"),
         free_shipping=raw.get("hasFreeShipping"),
         favorite_count=raw.get("favoriteCount"),
+        is_vector_result=bool(raw.get("isVectorSearchResult")),
     )
 
 
@@ -41,8 +42,10 @@ def _facet(raw: dict) -> Facet:
 
 def parse_search(props: dict) -> SearchPage:
     block = props.get("searchLots") or {}
+    meta = block.get("meta") or {}
     return SearchPage(
         total=block.get("total") or 0,
-        lots=tuple(_lot(raw) for raw in (block.get("lots") or []) if raw.get("id")),
+        lots=tuple(_lot(raw) for raw in (block.get("lots") or []) if raw.get("id") is not None),
         facets=tuple(_facet(raw) for raw in (block.get("filters") or [])),
+        extended=bool(meta.get("extended_search_result")),
     )
