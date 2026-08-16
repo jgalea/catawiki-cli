@@ -19,6 +19,13 @@ class ParseError(CataError):
         )
 
 
+class TransportError(CataError):
+    def __init__(self, url: str, reason: str):
+        self.url = url
+        self.reason = reason
+        super().__init__(f"could not reach {url}: {reason}")
+
+
 class NotFound(CataError):
     def __init__(self, url: str):
         self.url = url

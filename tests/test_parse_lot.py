@@ -39,6 +39,27 @@ def test_bids_are_newest_first(lot_open_props):
     assert stamps == sorted(stamps, reverse=True)
 
 
+def test_category_path_comes_from_the_auction_breadcrumb(lot_open_props):
+    lot = parse_lot(lot_open_props)
+    assert len(lot.category_path) >= 2
+    assert lot.category_id == lot.category_path[-1][0]
+    assert lot.group_category_id == lot.category_path[1][0]
+    assert lot.category
+
+
+def test_seller_is_parsed_from_nested_shape(lot_open_props):
+    seller = parse_lot(lot_open_props).seller
+    assert seller is not None
+    assert seller.id
+    assert seller.name
+    assert seller.country
+
+
+def test_url_does_not_repeat_the_lot_id(lot_open_props):
+    lot = parse_lot(lot_open_props)
+    assert lot.url.count(str(lot.id)) == 1
+
+
 def test_missing_bidding_block_is_tolerated():
     lot = parse_lot({"lotId": 7, "lotDetailsData": {"lotTitle": "x"}})
     assert lot.id == 7

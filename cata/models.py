@@ -100,6 +100,8 @@ class LotDetail:
     seller: Seller | None = None
     category: str | None = None
     category_id: int | None = None
+    group_category_id: int | None = None
+    category_path: tuple[tuple[int, str], ...] = ()
     specifications: tuple[Specification, ...] = ()
     current_bid: Money | None = None
     min_bid: Money | None = None

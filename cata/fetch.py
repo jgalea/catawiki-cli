@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .errors import Blocked, NotFound
+from .errors import Blocked, NotFound, TransportError
 
 BASE = "https://www.catawiki.com"
 DEFAULT_CACHE = Path.home() / ".cata" / "cache"
@@ -36,14 +36,17 @@ class Fetcher:
         impersonate: str = "chrome",
         session=None,
         retries: int = 3,
+        timeout: int = 30,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir else DEFAULT_CACHE
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_ttl = cache_ttl
         self.retries = retries
+        self.timeout = timeout
         self._limiter = _RateLimiter(rate_per_second)
         self._impersonate = impersonate
         self._session = session
+        self._owns_session = session is None
 
     def _get_session(self):
         if self._session is None:
@@ -72,9 +75,19 @@ class Fetcher:
         if cached is not None:
             return cached
 
+        last_transport_error: str | None = None
         for attempt in range(self.retries + 1):
             self._limiter.wait()
-            response = self._get_session().get(url, timeout=30)
+            try:
+                response = self._get_session().get(url, timeout=self.timeout)
+            except Exception as exc:
+                last_transport_error = f"{type(exc).__name__}: {exc}"
+                if self._owns_session:
+                    self._session = None
+                if attempt < self.retries:
+                    time.sleep(2**attempt)
+                    continue
+                raise TransportError(url, last_transport_error) from exc
             if response.status_code == 200:
                 final = str(getattr(response, "url", url) or url)
                 if "/l/" in url and "/l/" not in final:
