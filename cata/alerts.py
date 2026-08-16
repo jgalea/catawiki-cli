@@ -51,23 +51,20 @@ def evaluate(detail, watch, *, now=None, closing_within_minutes: int = 30) -> li
     return alerts
 
 
+def _applescript_string(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def _notify_macos(alert: Alert) -> None:
-    if shutil.which("terminal-notifier"):
-        subprocess.run(
-            [
-                "terminal-notifier",
-                "-title",
-                "Catawiki",
-                "-subtitle",
-                alert.title,
-                "-message",
-                alert.message,
-            ],
-            check=False,
-        )
-        return
+    """Post to Notification Center via osascript.
+
+    terminal-notifier is deliberately not used: its 2.x builds exit 0 on current macOS
+    while the notification never renders, which is worse than no alert at all.
+    """
     script = (
-        f"display notification {alert.message!r} with title \"Catawiki\" subtitle {alert.title!r}"
+        f"display notification {_applescript_string(alert.message)}"
+        f' with title "Catawiki"'
+        f" subtitle {_applescript_string(alert.title)}"
     )
     subprocess.run(["osascript", "-e", script], check=False)
 

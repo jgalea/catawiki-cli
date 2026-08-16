@@ -73,3 +73,26 @@ def test_terminal_sink_prints_the_alert():
     console = FakeConsole()
     deliver([Alert(1, "new_lot", "a chair", "new match")], ["terminal"], console=console)
     assert any("a chair" in line for line in console.lines)
+
+
+def test_notification_escapes_quotes_in_a_lot_title(monkeypatch):
+    from cata import alerts as alerts_mod
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["script"] = cmd[-1]
+
+    monkeypatch.setattr(alerts_mod.subprocess, "run", fake_run)
+    alerts_mod._notify_macos(
+        alerts_mod.Alert(1, "new_lot", 'Tecnotempo - "Excellence" - Automatic', "bid €410")
+    )
+    script = captured["script"]
+    assert '\\"Excellence\\"' in script
+    assert script.count('subtitle "') == 1
+
+
+def test_notification_survives_an_apostrophe():
+    from cata.alerts import _applescript_string
+
+    assert _applescript_string("Merlin's Stickers") == '"Merlin\'s Stickers"'

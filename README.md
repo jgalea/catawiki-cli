@@ -72,6 +72,8 @@ A saved search with `--match` fires once per lot the first time one matches, and
 
 Sinks are `terminal`, `macos`, `telegram` and `whatsapp`, comma-separated, or `none` to record hits silently. The last two shell out to a `telegram` or `pigeon` command; if that binary isn't on your PATH, the run says so rather than silently dropping the alert.
 
+`macos` posts through `osascript`. terminal-notifier is deliberately not used even when installed: its 2.x builds exit 0 on current macOS while the notification never appears, so it reports success for an alert you never got.
+
 ## Scheduling
 
 `cata harvest` is designed to run hourly. The sweep pages your saved searches, fetches detail for lots it hasn't seen before, refreshes anything closing within 48 hours, and records the outcome of everything that has ended. `scripts/harvest.sh` is a launchd-friendly wrapper.
