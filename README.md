@@ -34,9 +34,13 @@ This matters more than it sounds. Genuine result pages are salted with fallback 
 
 ## Install
 
+It needs Python 3.11 or newer and [uv](https://docs.astral.sh/uv/). From a clone of this repo:
+
 ```
 uv venv && uv pip install -e .
 ```
+
+That works the same on macOS, Linux and Windows. The `cata` command lands in `.venv/bin` (`.venv\Scripts` on Windows); activate the venv or call it by that path. Windows hasn't been tested on a real machine yet.
 
 ## Use
 
@@ -72,11 +76,11 @@ A saved search with `--match` fires once per lot the first time one matches, and
 
 Sinks are `terminal`, `macos`, `telegram` and `whatsapp`, comma-separated, or `none` to record hits silently. The last two shell out to a `telegram` or `pigeon` command; if that binary isn't on your PATH, the run says so rather than silently dropping the alert.
 
-`macos` posts through `osascript`. terminal-notifier is deliberately not used even when installed: its 2.x builds exit 0 on current macOS while the notification never appears, so it reports success for an alert you never got.
+`macos` posts through `osascript`, so it only works on a Mac. On Linux or Windows a `macos` sink reports that the alert wasn't sent, and saved searches without `--notify` default to `terminal` there instead of `macos`. terminal-notifier is deliberately not used even when installed: its 2.x builds exit 0 on current macOS while the notification never appears, so it reports success for an alert you never got.
 
 ## Scheduling
 
-`cata harvest` is designed to run hourly. The sweep pages your saved searches, fetches detail for lots it hasn't seen before, refreshes anything closing within 48 hours, and records the outcome of everything that has ended. `scripts/harvest.sh` is a launchd-friendly wrapper.
+`cata harvest` is designed to run hourly. The sweep pages your saved searches, fetches detail for lots it hasn't seen before, refreshes anything closing within 48 hours, and records the outcome of everything that has ended. `scripts/harvest.sh` is a wrapper for launchd on a Mac or cron on Linux. On Windows, point Task Scheduler at `.venv\Scripts\cata.exe harvest`.
 
 ## Where data lives
 

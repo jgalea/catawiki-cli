@@ -177,7 +177,7 @@ def track_add(
     if match:
         line += f", alerting on lots matching [bold]{match}[/bold]"
     console.print(line)
-    console.print(f"[dim]sweeps hourly, notifies via {notify or 'macos'}[/dim]")
+    console.print(f"[dim]sweeps hourly, notifies via {notify or alerts_mod.DEFAULT_SINK}[/dim]")
 
 
 @track_app.command("list")
@@ -437,6 +437,8 @@ def export_cmd(
         return
     if not rows:
         return
+    # csv writes its own \r\n; stop Windows text mode turning that into \r\r\n.
+    sys.stdout.reconfigure(newline="")
     writer = csv.DictWriter(sys.stdout, fieldnames=rows[0].keys())
     writer.writeheader()
     for row in rows:
@@ -444,6 +446,9 @@ def export_cmd(
 
 
 def main() -> None:
+    # A Windows console or pipe may not be UTF-8; print what it can rather than crash.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(errors="replace")
     try:
         app()
     except CataError as exc:

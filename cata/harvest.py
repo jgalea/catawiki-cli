@@ -104,16 +104,16 @@ class AlertBatch:
     alerts: list
 
 
-def pending_alerts(store, default_sinks: str = "macos") -> list[AlertBatch]:
+def pending_alerts(store, default_sinks: str | None = None) -> list[AlertBatch]:
     """New-lot alerts owed per saved search. Hits are marked only after a successful send."""
-    from .alerts import Alert
+    from .alerts import DEFAULT_SINK, Alert
 
     batches: list[AlertBatch] = []
     for search in store.searches():
         lot_ids = store.unalerted_hits(search["id"])
         if not lot_ids:
             continue
-        sinks = [s.strip() for s in (search["notify"] or default_sinks).split(",") if s.strip()]
+        sinks = [s.strip() for s in (search["notify"] or default_sinks or DEFAULT_SINK).split(",") if s.strip()]
         if not sinks or "none" in sinks:
             continue
 

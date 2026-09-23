@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 SINKS = ("terminal", "macos", "telegram", "whatsapp")
+# Notification Center is Mac-only; elsewhere a saved search with no sink prints instead.
+DEFAULT_SINK = "macos" if sys.platform == "darwin" else "terminal"
 
 TELEGRAM_CLI = "telegram"
 WHATSAPP_CLI = "pigeon"
@@ -92,7 +95,10 @@ def deliver(
         if "terminal" in sinks and console is not None:
             console.print(f"[bold yellow]{alert.kind}[/bold yellow] {alert.title}: {alert.message}")
         if "macos" in sinks:
-            _notify_macos(alert)
+            if shutil.which("osascript"):
+                _notify_macos(alert)
+            else:
+                problems.add("macos alerts need a Mac, so that alert was not sent")
         if "telegram" in sinks:
             problem = _notify_cli(TELEGRAM_CLI, alert, telegram_target)
             if problem:
